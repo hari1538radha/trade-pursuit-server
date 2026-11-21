@@ -21,6 +21,12 @@ const userSchema = new mongoose.Schema(
         dailyLossLimit: { type: Number, default: 0 },
         maxTradesPerDay: { type: Number, default: 0 },
       },
+      appearance: {
+        car: { type: String, default: 'm4-snow' }, // dashboard background id, 'custom' or 'none'
+        customName: { type: String, default: '' },
+        customImage: { type: String, default: '' }, // user's own photo (data URL)
+        glass: { type: Number, default: 50 }, // card opacity over the background, %
+      },
       tags: {
         playbooks: { type: [String], default: ['Reversal', 'Continuation', 'Retracement', 'Manipulation'] },
         targets: { type: [String], default: ['Liquidity sweep', 'Equal highs', 'Equal lows', 'Session liquidity', 'Major high', 'Major low'] },
