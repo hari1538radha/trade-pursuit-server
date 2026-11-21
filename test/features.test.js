@@ -50,7 +50,7 @@ test('news feed rows are normalized and sorted', () => {
 test('news is cached and served stale when the feed fails', async () => {
   _resetNewsCache();
   let calls = 0;
-  const ok = async () => { calls++; return { ok: true, json: async () => [{ title: 'NFP', country: 'USD', date: '2026-11-20T08:30:00-05:00', impact: 'High' }] }; };
+  const ok = async () => { calls++; return { ok: true, text: async () => JSON.stringify([{ title: 'NFP', country: 'USD', date: '2026-11-20T08:30:00-05:00', impact: 'High' }]) }; };
   const a = await getNews('thisweek', ok);
   const b = await getNews('thisweek', ok);
   assert.equal(calls, 1);
@@ -58,5 +58,10 @@ test('news is cached and served stale when the feed fails', async () => {
   assert.equal(b.cached, true);
   await assert.rejects(getNews('lastyear', ok), /Unknown week/);
   _resetNewsCache();
-  await assert.rejects(getNews('nextweek', async () => ({ ok: false, status: 429 })), /unavailable/);
+  await assert.rejects(getNews('nextweek', async () => ({ ok: false, status: 429 })), (e) => e.status === 502 && /rate limited/.test(e.reason));
+  let hits = 0;
+  await assert.rejects(getNews('nextweek', async () => { hits++; return { ok: false, status: 429 }; }), /unavailable/);
+  assert.equal(hits, 0, 'backs off after a failure instead of hitting the feed again');
+  _resetNewsCache();
+  await assert.rejects(getNews('nextweek', async () => ({ ok: true, text: async () => '<html>blocked</html>' })), (e) => /did not return JSON/.test(e.reason));
 });

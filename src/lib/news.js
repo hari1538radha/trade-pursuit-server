@@ -7,6 +7,8 @@ const FEEDS = {
 };
 const TTL = 30 * 60 * 1000;
 const cache = new Map(); // week -> { at, events }
+const failures = new Map(); // week -> { at, reason }: back off after a failure
+const BACKOFF = 2 * 60 * 1000;
 
 const IMPACTS = { High: 'high', Medium: 'medium', Low: 'low', Holiday: 'holiday', 'Non-Economic': 'none' };
 
@@ -37,17 +39,28 @@ export async function getNews(week = 'thisweek', fetchImpl = fetch) {
   if (!url) throw Object.assign(new Error('Unknown week'), { status: 400 });
   const hit = cache.get(week);
   if (hit && Date.now() - hit.at < TTL) return { events: hit.events, updatedAt: new Date(hit.at).toISOString(), cached: true };
+  const failed = failures.get(week);
+  if (failed && Date.now() - failed.at < BACKOFF) {
+    if (hit) return { events: hit.events, updatedAt: new Date(hit.at).toISOString(), cached: true, stale: true };
+    throw Object.assign(new Error('News feed is unavailable right now, try again in a few minutes'), { status: 502, reason: `${failed.reason} (retrying after a short pause)` });
+  }
   try {
-    const res = await fetchImpl(url, { headers: { Accept: 'application/json', 'User-Agent': 'TradePursuit/1.0' }, signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) throw new Error(`Feed answered ${res.status}`);
-    const events = normalize(await res.json());
+    const res = await fetchImpl(url, { headers: { Accept: 'application/json,text/plain,*/*', 'User-Agent': 'Mozilla/5.0 (compatible; TradePursuit/1.0)' }, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`feed answered HTTP ${res.status}${res.status === 429 ? ' (rate limited)' : ''}`);
+    const text = await res.text();
+    let rows;
+    try { rows = JSON.parse(text); } catch { throw new Error(`feed did not return JSON (starts with: ${text.slice(0, 60).replace(/\s+/g, ' ')})`); }
+    const events = normalize(rows);
     cache.set(week, { at: Date.now(), events });
+    failures.delete(week);
     return { events, updatedAt: new Date().toISOString(), cached: false };
   } catch (err) {
     // Serve stale data rather than nothing if the feed is rate limiting us.
+    console.error(`[news] ${week}: ${err.message}`);
+    failures.set(week, { at: Date.now(), reason: err.message });
     if (hit) return { events: hit.events, updatedAt: new Date(hit.at).toISOString(), cached: true, stale: true };
-    throw Object.assign(new Error('News feed is unavailable right now, try again in a few minutes'), { status: 502, cause: err });
+    throw Object.assign(new Error('News feed is unavailable right now, try again in a few minutes'), { status: 502, reason: err.message });
   }
 }
 
-export const _resetNewsCache = () => cache.clear();
+export const _resetNewsCache = () => { cache.clear(); failures.clear(); };

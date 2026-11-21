@@ -56,7 +56,7 @@ export function createApp() {
       const out = await getNews(String(req.query.week || 'thisweek'));
       res.set('Cache-Control', 'public, max-age=300').json(out);
     } catch (e) {
-      throw new HttpError(e.status || 502, e.message);
+      throw new HttpError(e.status || 502, e.message, e.reason ? { reason: e.reason } : undefined);
     }
   });
 
