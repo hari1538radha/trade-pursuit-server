@@ -15,6 +15,7 @@ import accountRoutes from './routes/accounts.js';
 import planRoutes from './routes/plans.js';
 import postRoutes from './routes/posts.js';
 import friendRoutes from './routes/friends.js';
+import marketRoutes from './routes/markets.js';
 import { getNews } from './lib/news.js';
 import { HttpError } from './lib/http.js';
 
@@ -50,6 +51,7 @@ export function createApp() {
   app.use('/api/plans', requireAuth, planRoutes);
   app.use('/api/posts', requireAuth, postRoutes);
   app.use('/api/friends', requireAuth, friendRoutes);
+  app.use('/api/markets', requireAuth, marketRoutes);
   // Economic calendar: ?week=thisweek|nextweek
   app.get('/api/news', async (req, res) => {
     try {

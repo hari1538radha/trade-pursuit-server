@@ -21,6 +21,10 @@ const planSchema = new mongoose.Schema(
       default: [],
       validate: (v) => v.length <= 8,
     },
+    rangeChecks: {
+      type: [{ symbol: String, adr: Number, todayRange: Number, pct: Number, left: Number, pdh: Number, pdl: Number, verdict: String, line: String, at: Date, _id: false }],
+      default: [],
+    },
     sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true }

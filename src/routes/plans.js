@@ -20,6 +20,11 @@ export const planInput = z.object({
   bullCase: z.string().max(1500).optional(),
   bearCase: z.string().max(1500).optional(),
   newsToWatch: z.string().max(1500).optional(),
+  rangeChecks: z.array(z.object({
+    symbol: z.string().max(20), adr: z.number().nullable().optional(), todayRange: z.number().nullable().optional(), pct: z.number().nullable().optional(),
+    left: z.number().nullable().optional(), pdh: z.number().nullable().optional(), pdl: z.number().nullable().optional(),
+    verdict: z.string().max(20).optional(), line: z.string().max(300), at: z.coerce.date().optional(),
+  })).max(30).optional(),
   images: z.array(z.object({ src: z.string().max(1_500_000), caption: z.string().max(140).optional().default('') })).max(8).optional(),
 });
 
