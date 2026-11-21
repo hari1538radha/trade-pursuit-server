@@ -39,6 +39,8 @@ Check it: `https://<your-service>.onrender.com/api/health` → `{"ok":true}`.
 Free services sleep after 15 minutes idle and take about a minute to wake on the next request.
 
 ## Endpoints
-`/api/auth` (register, login, me, password) · `/api/trades` · `/api/accounts` · `/api/plans/:date` · `/api/posts` · `/api/firms` · `/api/health`
+`/api/auth` (register, login, me, password) · `/api/trades` · `/api/accounts` · `/api/plans` (list, `/:date`, `/:date/share`, `/shared?date=`) · `/api/friends` (list, request, `/:id/accept`, remove) · `/api/posts` · `/api/news?week=thisweek|nextweek` · `/api/firms` · `/api/health`
+
+The news endpoint reads the free Forex Factory weekly calendar export and caches it for 30 minutes, so the Render service needs outbound internet access (it has it by default).
 
 Prop firm rules live in `src/data/firms.json`.
