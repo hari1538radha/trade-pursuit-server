@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { normalizeChain, chainStats, maxPain, buildup, spikes } from '../src/lib/market/options.js';
 import { parseBhavcopy } from '../src/lib/market/nse.js';
 import { analyze, rsi, levels } from '../src/lib/market/scanner.js';
+import { tickDelta } from '../src/lib/market/options.js';
 import { extractCookie, parseOiChange } from '../src/lib/market/sensibull.js';
 
 const side = (ltp, close, oi, prev, iv = 15) => ({ instrument_key: 'X', market_data: { ltp, close_price: close, oi, prev_oi: prev, volume: 10 }, option_greeks: { iv, delta: 0.5 } });
@@ -117,4 +118,15 @@ test('pending EOD dates skip weekends and wait for the evening file', async () =
   assert.deepEqual(d, ['2026-11-20']); // Fri only; Sat/Sun skipped, Monday's file not out yet
   const evening = new Date(Date.UTC(2026, 10, 23, 20, 0));
   assert.deepEqual(pendingDates('2026-11-20', evening).map((x) => x.toISOString().slice(0, 10)), ['2026-11-23']);
+});
+
+test('3-second tick: OI change per strike since the previous pull', () => {
+  const row = (strike, ce, pe, cd = 0, pd = 0) => ({ strike, ce: { oi: ce, delta: cd }, pe: { oi: pe, delta: pd } });
+  const a = [row(100, 1000, 2000), row(110, 500, 800), row(120, 300, 100)];
+  const b = [row(100, 1000, 2600), row(110, 450, 800, 0.52, -0.48), row(120, 300, 100)];
+  const t = tickDelta(a, b, 110);
+  assert.equal(t.dCe, -50); assert.equal(t.dPe, 600);
+  assert.deepEqual(t.strikes, [[100, 0, 600], [110, -50, 0]]);
+  assert.equal(t.ceDelta, 0.52); assert.equal(t.peDelta, -0.48);
+  assert.equal(tickDelta(b, b, 110).changed, false);
 });

@@ -113,3 +113,27 @@ export function marketOpen(d = new Date()) {
   const day = ist.getDay(), mins = ist.getHours() * 60 + ist.getMinutes();
   return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
 }
+
+/**
+ * Change between two pulls of the same chain (the "tick").
+ * Returns totals, per-strike changes (only strikes that moved: [strike, dCeOI, dPeOI])
+ * and the ATM call/put option delta when the feed provides greeks.
+ */
+export function tickDelta(prev, chain, atmStrike) {
+  const before = new Map((prev || []).map((r) => [r.strike, r]));
+  let dCe = 0, dPe = 0;
+  const strikes = [];
+  for (const r of chain) {
+    const p = before.get(r.strike);
+    if (!p) continue;
+    const c = r.ce.oi - p.ce.oi, q = r.pe.oi - p.pe.oi;
+    dCe += c; dPe += q;
+    if (c || q) strikes.push([r.strike, c, q]);
+  }
+  const atm = chain.find((r) => r.strike === atmStrike);
+  return {
+    dCe, dPe, strikes,
+    ceDelta: atm?.ce.delta || null, peDelta: atm?.pe.delta || null,
+    changed: strikes.length > 0,
+  };
+}

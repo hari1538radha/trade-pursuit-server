@@ -5,7 +5,8 @@ import { HttpError, parse } from '../lib/http.js';
 import { OISnapshot } from '../models/OISnapshot.js';
 import { EodSeries, Watch } from '../models/Market.js';
 import * as sb from '../lib/market/sensibull.js';
-import { chainStats, marketOpen } from '../lib/market/options.js';
+import { chainStats, marketOpen, tickDelta } from '../lib/market/options.js';
+import { OITick } from '../models/OITick.js';
 import { SETUPS, analyze } from '../lib/market/scanner.js';
 import * as eod from '../lib/market/eod.js';
 
@@ -13,6 +14,9 @@ const r = Router();
 
 // ---------------- Option chain (Sensibull, user's own session) ----------------
 const lastCall = new Map(); // userId -> ms (rate limit)
+const inFlight = new Set(); // userIds with a Sensibull call running
+const lastChain = new Map(); // `${user}|${key}|${expiry}` -> { at, chain } for the 3-second delta
+const MIN_GAP_MS = 2500; // the page pulls every 3 seconds
 
 async function saveSnapshot(user, key, expiry, chain, stats, minGapMs = 3 * 60000) {
   const lastSnap = await OISnapshot.findOne({ user, symbol: key, expiry }).sort({ at: -1 }).select('at').lean();
@@ -34,15 +38,39 @@ const chainInput = z.object({
 r.post('/options/chain', requireAuth, async (req, res) => {
   const body = parse(chainInput, req.body);
   const last = lastCall.get(req.userId) || 0;
-  if (Date.now() - last < 20000) throw new HttpError(429, 'Wait a few seconds between refreshes');
+  if (inFlight.has(req.userId) || Date.now() - last < MIN_GAP_MS) throw new HttpError(429, 'Too fast: one refresh every 3 seconds');
   lastCall.set(req.userId, Date.now());
-  const raw = await sb.fetchOiChange({ cookie: sb.extractCookie(body.cookie), underlying: body.underlying, expiry: body.expiry, atm: body.atm, deviceId: body.deviceId });
+  inFlight.add(req.userId);
+  let raw;
+  try {
+    raw = await sb.fetchOiChange({ cookie: sb.extractCookie(body.cookie), underlying: body.underlying, expiry: body.expiry, atm: body.atm, deviceId: body.deviceId });
+  } finally { inFlight.delete(req.userId); }
   const parsed = sb.parseOiChange(raw);
   if (!parsed.rows.length) throw new HttpError(502, 'Sensibull returned no strikes for that expiry. Check the expiry date.');
   const chain = parsed.rows.map((x) => ({ ...x, expiry: body.expiry }));
   const stats = chainStats(chain, { spot: parsed.spot, atmStrike: parsed.atmStrike });
-  if (stats && marketOpen()) await saveSnapshot(req.userId, body.underlying, body.expiry, chain, stats);
-  res.json({ chain, stats, has: parsed.has, marketOpen: marketOpen(), at: new Date(), ...(body.debug && { debug: { keys: parsed.keys, sampleStrike: parsed.sampleStrike } }) });
+  const open = marketOpen();
+
+  // Delta since this user's previous pull of the same chain (ignored if older than a minute)
+  const k = `${req.userId}|${body.underlying}|${body.expiry}`;
+  const prev = lastChain.get(k);
+  lastChain.set(k, { at: Date.now(), chain });
+  let tick = null;
+  if (stats && prev && Date.now() - prev.at < 60000) {
+    const d = tickDelta(prev.chain, chain, stats.atm);
+    tick = { at: new Date(), spot: stats.spot, atm: stats.atm, pcr: stats.pcr, ceOI: stats.ceOI, peOI: stats.peOI, dCe: d.dCe, dPe: d.dPe, ceDelta: d.ceDelta, peDelta: d.peDelta, d: d.strikes };
+    if (open) await OITick.create({ user: req.userId, symbol: body.underlying, expiry: body.expiry, ...tick });
+  }
+  if (stats && open) await saveSnapshot(req.userId, body.underlying, body.expiry, chain, stats);
+  res.json({ chain, stats, has: parsed.has, marketOpen: open, at: new Date(), tick, ...(body.debug && { debug: { keys: parsed.keys, sampleStrike: parsed.sampleStrike } }) });
+});
+
+// Recorded 3-second ticks: ?key=NIFTY&expiry=YYYY-MM-DD[&since=ISO] (default: last 8 hours, max 3000)
+r.get('/options/ticks', requireAuth, async (req, res) => {
+  const { key, expiry, since } = parse(z.object({ key: z.string().min(2).max(60), expiry: z.string(), since: z.coerce.date().optional() }), req.query);
+  const from = since || new Date(Date.now() - 8 * 3600000);
+  const ticks = await OITick.find({ user: req.userId, symbol: key, expiry, at: { $gt: from } }).sort({ at: -1 }).limit(3000).lean();
+  res.json({ ticks: ticks.reverse().map(({ _id, user, __v, ...x }) => x) });
 });
 
 r.get('/options/history', requireAuth, async (req, res) => {

@@ -53,7 +53,7 @@ test('notes and quiz are protected and validated', async () => {
 });
 
 test('market routes are protected and validated', async () => {
-  for (const p of ['/api/options/history?key=NIFTY&expiry=2026-11-25', '/api/stocks/scan', '/api/watchlist']) {
+  for (const p of ['/api/options/history?key=NIFTY&expiry=2026-11-25', '/api/options/ticks?key=NIFTY&expiry=2026-11-25', '/api/stocks/scan', '/api/watchlist']) {
     assert.equal((await request(app).get(p)).status, 401, p);
   }
   assert.equal((await request(app).post('/api/options/chain').send({})).status, 401);
