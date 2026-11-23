@@ -70,7 +70,7 @@ test('market routes are protected and validated', async () => {
 
 test('roles: normal users are kept out of admin-only areas', async () => {
   const asUser = (m, p) => request(app)[m](p).set('Authorization', `Bearer ${userToken}`);
-  for (const p of ['/api/admin/users', '/api/notes', '/api/quiz', '/api/options/recorders', '/api/stocks/scan', '/api/watchlist', '/api/markets/goldbach?symbol=XAUUSD']) {
+  for (const p of ['/api/me/money/entries', '/api/me/money/emis', '/api/me/props/purchases', '/api/me/props/payouts', '/api/me/life/days', '/api/admin/users', '/api/notes', '/api/quiz', '/api/options/recorders', '/api/stocks/scan', '/api/watchlist', '/api/markets/goldbach?symbol=XAUUSD']) {
     const r = await asUser('get', p);
     assert.equal(r.status, 403, p);
     assert.match(r.body.error, /admins only/);
@@ -82,4 +82,14 @@ test('roles: normal users are kept out of admin-only areas', async () => {
   assert.equal(a.status, 400);
   // Signed-out still gets 401
   assert.equal((await request(app).get('/api/admin/users')).status, 401);
+});
+
+test('personal tracking validates input (admin)', async () => {
+  const as = (m, p) => request(app)[m](p).set('Authorization', `Bearer ${token}`);
+  assert.equal((await as('post', '/api/me/money/entries').send({ kind: 'expense', date: '23-11-2026', amount: 100 })).status, 400);
+  assert.equal((await as('post', '/api/me/money/entries').send({ kind: 'gift', date: '2026-11-23', amount: 100 })).status, 400);
+  assert.equal((await as('post', '/api/me/money/emis').send({ name: 'Bike', amount: 3000, start: '2026-01', months: 0 })).status, 400);
+  assert.equal((await as('post', '/api/me/props/payouts').send({ date: '2026-10-22', firm: 'FundingPips', gross: 503 })).status, 400);
+  assert.equal((await as('put', '/api/me/life/days/yesterday').send({})).status, 400);
+  assert.equal((await as('put', '/api/me/life/days/2026-11-23').send({ sleep: 'lots' })).status, 400);
 });

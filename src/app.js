@@ -18,6 +18,7 @@ import noteRoutes from './routes/notes.js';
 import quizRoutes from './routes/quiz.js';
 import marketRoutes from './routes/market.js';
 import adminRoutes from './routes/admin.js';
+import personalRoutes from './routes/personal.js';
 import { getNews } from './lib/news.js';
 import { HttpError } from './lib/http.js';
 
@@ -53,6 +54,7 @@ export function createApp() {
   app.use('/api/plans', requireAuth, planRoutes);
   // Admin-only areas
   app.use('/api/admin', requireAuth, requireAdmin, adminRoutes);
+  app.use('/api/me', requireAuth, requireAdmin, personalRoutes); // money, payouts, lifestyle (admin's own)
   app.use('/api/notes', requireAuth, requireAdmin, noteRoutes);
   app.use('/api/quiz', requireAuth, requireAdmin, quizRoutes);
   app.use('/api/markets', requireAuth, rangeRoutes); // range check

@@ -27,6 +27,9 @@ const userSchema = new mongoose.Schema(
         maxTradesPerDay: { type: Number, default: 0 },
       },
       donts: { type: [String], default: [] }, // trader's own 'never do this' list
+      // Admin personal tracking: lifestyle targets/habits/diet plan, money settings (₹ per $ etc.)
+      life: { type: mongoose.Schema.Types.Mixed, default: undefined },
+      finance: { type: mongoose.Schema.Types.Mixed, default: undefined },
       coach: {
         enabled: { type: Boolean, default: true },
         lookback: { type: Number, default: 5 },
