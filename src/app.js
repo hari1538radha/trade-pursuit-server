@@ -13,11 +13,9 @@ import authRoutes from './routes/auth.js';
 import tradeRoutes from './routes/trades.js';
 import accountRoutes from './routes/accounts.js';
 import planRoutes from './routes/plans.js';
-import postRoutes from './routes/posts.js';
-import friendRoutes from './routes/friends.js';
-import marketRoutes from './routes/markets.js';
-import { getNews } from './lib/news.js';
-import { HttpError } from './lib/http.js';
+import noteRoutes from './routes/notes.js';
+import quizRoutes from './routes/quiz.js';
+import marketRoutes from './routes/market.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const firms = JSON.parse(readFileSync(path.join(here, 'data/firms.json'), 'utf8'));
@@ -49,18 +47,9 @@ export function createApp() {
   app.use('/api/trades', requireAuth, tradeRoutes);
   app.use('/api/accounts', requireAuth, accountRoutes);
   app.use('/api/plans', requireAuth, planRoutes);
-  app.use('/api/posts', requireAuth, postRoutes);
-  app.use('/api/friends', requireAuth, friendRoutes);
-  app.use('/api/markets', requireAuth, marketRoutes);
-  // Economic calendar: ?week=thisweek|nextweek
-  app.get('/api/news', async (req, res) => {
-    try {
-      const out = await getNews(String(req.query.week || 'thisweek'));
-      res.set('Cache-Control', 'public, max-age=300').json(out);
-    } catch (e) {
-      throw new HttpError(e.status || 502, e.message, e.reason ? { reason: e.reason } : undefined);
-    }
-  });
+  app.use('/api/notes', requireAuth, noteRoutes);
+  app.use('/api/quiz', requireAuth, quizRoutes);
+  app.use('/api', marketRoutes); // options, stocks, watchlist (auth applied per route)
 
   app.use(notFound);
   app.use(errorHandler);
