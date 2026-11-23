@@ -130,3 +130,33 @@ test('3-second tick: OI change per strike since the previous pull', () => {
   assert.equal(t.ceDelta, 0.52); assert.equal(t.peDelta, -0.48);
   assert.equal(tickDelta(b, b, 110).changed, false);
 });
+
+test('recorder: session cookie is sealed and only readable with the key', async () => {
+  const { seal, open } = await import('../src/lib/secret.js');
+  const s = seal('access_token=abc; x=1');
+  assert.ok(!s.includes('access_token'));
+  assert.equal(open(s), 'access_token=abc; x=1');
+  const parts = s.split('.'); parts[2] = Buffer.from('tampered').toString('base64');
+  assert.throws(() => open(parts.join('.')));
+});
+
+test('recorder: full chain packs and unpacks with day change', async () => {
+  const { pack, unpack } = await import('../src/lib/market/store.js');
+  const chain = [{ strike: 100, ce: { oi: 50, prevOi: 40, delta: 0.61234 }, pe: { oi: 70, prevOi: 90, delta: -0.39 } }];
+  assert.deepEqual(pack(chain, false), [[100, 50, 70, 40, 90]]);
+  const p = pack(chain, true);
+  assert.deepEqual(p, [[100, 50, 70, 40, 90, 0.6123, -0.39]]);
+  const u = unpack(p, '2026-11-25')[0];
+  assert.equal(u.ce.chgOi, 10); assert.equal(u.pe.chgOi, -20); assert.equal(u.ce.delta, 0.6123);
+});
+
+test('goldbach data: yahoo candles, 4h grouping and stooq spot', async () => {
+  const { candlesFromYahoo, spotFromStooq } = await import('../src/lib/goldbach.js');
+  const json = { chart: { result: [{ meta: { regularMarketPrice: 4012 }, timestamp: [1, 2, 3, 4, 5], indicators: { quote: [{ open: [1, 2, 3, 4, 5], high: [2, 3, 9, 5, 6], low: [0.5, 1, 2, 3, 4], close: [2, 3, 4, 5, 5.5] }] } }] } };
+  const one = candlesFromYahoo(json);
+  assert.equal(one.candles.length, 5); assert.equal(one.last, 4012);
+  const four = candlesFromYahoo(json, 4).candles;
+  assert.deepEqual(four[0], { t: 1000, o: 1, h: 9, l: 0.5, c: 5 });
+  assert.equal(spotFromStooq('Symbol,Date,Time,Open,High,Low,Close\nXAUUSD,2026-11-23,10:00:00,3990,4005,3980,3998.4'), 3998.4);
+  assert.equal(spotFromStooq('Symbol,Date\nXAUUSD,N/D'), null);
+});

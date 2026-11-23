@@ -40,7 +40,14 @@ Free services sleep after 15 minutes idle and take about a minute to wake on the
 
 ## Market data
 
-**Option chain (Sensibull).** Each user pastes their own Sensibull session (cookie string or the whole copied curl) on the Options page. It is kept only in that user's browser and sent with each refresh; the server uses it for that one request, never stores or logs it, and allows at most one refresh per user every 20 seconds. Snapshots of the derived OI totals are saved while the page is open during market hours (kept 14 days) for the time charts. This uses an unofficial Sensibull endpoint: it can change or stop working, and using it may be against Sensibull's terms.
+**Option chain (Sensibull).** Each user pastes their own Sensibull session (cookie string or the whole copied curl) on the Options page. With the page open it pulls every 3 seconds through `POST /api/options/chain`.
+
+**Server recorder.** A user can turn on server recording for up to 3 chains. The server then pulls each chain every 3 seconds from 9:15 to 15:30 IST, even with the site closed, and stores every update (`oiticks`, full per-strike OI whenever something changed, kept 3 days) plus 3-minute snapshots (`oisnapshots`, 14 days). For this the session is stored encrypted (AES-256-GCM) in `sbrecorders`; it is never returned by the API and is deleted with "Remove my session from the server" or account deletion. When an expiry passes, the recorder moves to the next expiry Sensibull has strikes for. An expired session marks the recorder `expired` until a fresh one is pasted.
+- Encryption key: `SECRET_KEY` if set, otherwise derived from `JWT_SECRET`. Changing either makes stored sessions unreadable (users paste again).
+- The recorder only runs while the server is awake. Render's free plan sleeps after ~15 minutes without traffic: use a paid instance, or point an uptime pinger (e.g. UptimeRobot, every 5 minutes) at `/api/health`.
+- This uses an unofficial Sensibull endpoint: it can change or stop working, and frequent automated use may be against Sensibull's terms.
+
+**Goldbach.** `GET /api/markets/goldbach?symbol=XAUUSD|XAGUSD&interval=15m|1h|4h|1d` returns COMEX futures candles shifted to spot (Stooq) plus the average daily range; the page computes the PO3 dealing ranges and Goldbach levels.
 
 **Stocks (NSE end-of-day).** The server downloads NSE's public daily CM bhavcopy files, keeps ~300 days per symbol and re-runs the scanner after each evening's file. The first load backfills a year (a few minutes); later updates take seconds. It runs while the server is awake; Render's free plan sleeps after 15 idle minutes, so opening the Stocks page (or a free uptime monitor hitting `/api/health`) keeps it current.
 

@@ -3,9 +3,13 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { HttpError, parse } from '../lib/http.js';
 import { OISnapshot } from '../models/OISnapshot.js';
+import { SbRecorder } from '../models/SbRecorder.js';
+import { seal } from '../lib/secret.js';
+import { recordPull, latestChain } from '../lib/market/store.js';
+import { refreshRecorders } from '../lib/market/recorder.js';
 import { EodSeries, Watch } from '../models/Market.js';
 import * as sb from '../lib/market/sensibull.js';
-import { chainStats, marketOpen, tickDelta } from '../lib/market/options.js';
+import { chainStats, marketOpen } from '../lib/market/options.js';
 import { OITick } from '../models/OITick.js';
 import { SETUPS, analyze } from '../lib/market/scanner.js';
 import * as eod from '../lib/market/eod.js';
@@ -15,16 +19,7 @@ const r = Router();
 // ---------------- Option chain (Sensibull, user's own session) ----------------
 const lastCall = new Map(); // userId -> ms (rate limit)
 const inFlight = new Set(); // userIds with a Sensibull call running
-const lastChain = new Map(); // `${user}|${key}|${expiry}` -> { at, chain } for the 3-second delta
 const MIN_GAP_MS = 2500; // the page pulls every 3 seconds
-
-async function saveSnapshot(user, key, expiry, chain, stats, minGapMs = 3 * 60000) {
-  const lastSnap = await OISnapshot.findOne({ user, symbol: key, expiry }).sort({ at: -1 }).select('at').lean();
-  if (lastSnap && Date.now() - new Date(lastSnap.at).getTime() < minGapMs) return;
-  const i = chain.findIndex((x) => x.strike === stats.atm);
-  const near = chain.slice(Math.max(0, i - 12), i + 13).map((x) => [x.strike, x.ce.oi, x.pe.oi, x.ce.chgOi, x.pe.chgOi]);
-  await OISnapshot.create({ user, symbol: key, expiry, spot: stats.spot, pcr: stats.pcr, ceOI: stats.ceOI, peOI: stats.peOI, ceChg: stats.ceChg, peChg: stats.peChg, maxPain: stats.maxPain, atmIv: stats.atmIv, strikes: near });
-}
 
 const chainInput = z.object({
   cookie: z.string().min(10).max(8000),
@@ -48,29 +43,101 @@ r.post('/options/chain', requireAuth, async (req, res) => {
   const parsed = sb.parseOiChange(raw);
   if (!parsed.rows.length) throw new HttpError(502, 'Sensibull returned no strikes for that expiry. Check the expiry date.');
   const chain = parsed.rows.map((x) => ({ ...x, expiry: body.expiry }));
-  const stats = chainStats(chain, { spot: parsed.spot, atmStrike: parsed.atmStrike });
   const open = marketOpen();
-
-  // Delta since this user's previous pull of the same chain (ignored if older than a minute)
-  const k = `${req.userId}|${body.underlying}|${body.expiry}`;
-  const prev = lastChain.get(k);
-  lastChain.set(k, { at: Date.now(), chain });
-  let tick = null;
-  if (stats && prev && Date.now() - prev.at < 60000) {
-    const d = tickDelta(prev.chain, chain, stats.atm);
-    tick = { at: new Date(), spot: stats.spot, atm: stats.atm, pcr: stats.pcr, ceOI: stats.ceOI, peOI: stats.peOI, dCe: d.dCe, dPe: d.dPe, ceDelta: d.ceDelta, peDelta: d.peDelta, d: d.strikes };
-    if (open) await OITick.create({ user: req.userId, symbol: body.underlying, expiry: body.expiry, ...tick });
-  }
-  if (stats && open) await saveSnapshot(req.userId, body.underlying, body.expiry, chain, stats);
+  const { stats, tick } = await recordPull({ user: req.userId, key: body.underlying, expiry: body.expiry, chain, spot: parsed.spot, atmStrike: parsed.atmStrike, has: parsed.has, save: open });
   res.json({ chain, stats, has: parsed.has, marketOpen: open, at: new Date(), tick, ...(body.debug && { debug: { keys: parsed.keys, sampleStrike: parsed.sampleStrike } }) });
 });
 
-// Recorded 3-second ticks: ?key=NIFTY&expiry=YYYY-MM-DD[&since=ISO] (default: last 8 hours, max 3000)
+// Recorded ticks: ?key&expiry[&since=ISO][&bucket=1m]
+//  raw: every 3s tick (latest 3000, without the full chain); bucket=1m: summed per minute for the whole day
 r.get('/options/ticks', requireAuth, async (req, res) => {
-  const { key, expiry, since } = parse(z.object({ key: z.string().min(2).max(60), expiry: z.string(), since: z.coerce.date().optional() }), req.query);
+  const { key, expiry, since, bucket } = parse(z.object({ key: z.string().min(2).max(60), expiry: z.string(), since: z.coerce.date().optional(), bucket: z.enum(['1m']).optional() }), req.query);
   const from = since || new Date(Date.now() - 8 * 3600000);
-  const ticks = await OITick.find({ user: req.userId, symbol: key, expiry, at: { $gt: from } }).sort({ at: -1 }).limit(3000).lean();
+  if (bucket === '1m') {
+    const rows = await OITick.find({ user: req.userId, symbol: key, expiry, at: { $gt: from } }).select('at dCe dPe pcr ceOI peOI spot').sort({ at: 1 }).lean();
+    const m = new Map();
+    for (const t of rows) {
+      const k = Math.floor(new Date(t.at).getTime() / 60000) * 60000;
+      const b = m.get(k) || { at: new Date(k), dCe: 0, dPe: 0, n: 0 };
+      b.dCe += t.dCe || 0; b.dPe += t.dPe || 0; b.n++; b.pcr = t.pcr; b.ceOI = t.ceOI; b.peOI = t.peOI; b.spot = t.spot;
+      m.set(k, b);
+    }
+    return res.json({ ticks: [...m.values()], bucket: '1m' });
+  }
+  const ticks = await OITick.find({ user: req.userId, symbol: key, expiry, at: { $gt: from } }).select('-s').sort({ at: -1 }).limit(3000).lean();
   res.json({ ticks: ticks.reverse().map(({ _id, user, __v, ...x }) => x) });
+});
+
+// Per-strike OI over time from the stored full chains: ?key&expiry&strikes=26100,26150[&since]
+// Returns at most ~1500 points (evenly thinned) per request.
+r.get('/options/strike-series', requireAuth, async (req, res) => {
+  const q = parse(z.object({ key: z.string().min(2).max(60), expiry: z.string(), strikes: z.string().max(200), since: z.coerce.date().optional() }), req.query);
+  const want = new Set(q.strikes.split(',').map(Number).filter(Number.isFinite).slice(0, 8));
+  const from = q.since || new Date(Date.now() - 8 * 3600000);
+  const docs = await OITick.find({ user: req.userId, symbol: q.key, expiry: q.expiry, at: { $gt: from }, s: { $exists: true } }).select('at s').sort({ at: 1 }).lean();
+  const step = Math.max(1, Math.ceil(docs.length / 1500));
+  const points = [];
+  for (let i = 0; i < docs.length; i += step) {
+    const d = i + step >= docs.length ? docs.at(-1) : docs[i];
+    points.push({ at: d.at, s: d.s.filter((x) => want.has(x[0])).map((x) => x.slice(0, 5)) });
+  }
+  res.json({ points, thinned: step > 1 });
+});
+
+// Latest chain from the database (filled by the server recorder or by an open page)
+r.get('/options/live', requireAuth, async (req, res) => {
+  const { key, expiry } = parse(z.object({ key: z.string().min(2).max(60), expiry: z.string() }), req.query);
+  const live = await latestChain(req.userId, key, expiry);
+  if (!live) return res.json({ chain: [], stats: null, at: null, marketOpen: marketOpen() });
+  res.json({ chain: live.chain, stats: chainStats(live.chain, {}), has: live.has, at: live.at, tick: live.tick, marketOpen: marketOpen(), source: 'db' });
+});
+
+// ---- Server recorder (keeps recording when the site is closed) ----
+const recView = (r) => ({ id: String(r._id), underlying: r.underlying, expiry: r.expiry, atm: r.atm, autoRoll: r.autoRoll, enabled: r.enabled, status: r.status, lastAt: r.lastAt, lastError: r.lastError, pulls: r.pulls, updatedAt: r.updatedAt });
+
+r.get('/options/recorders', requireAuth, async (req, res) => {
+  const recs = await SbRecorder.find({ user: req.userId }).sort({ underlying: 1 }).lean();
+  res.json({ recorders: recs.map(recView), marketOpen: marketOpen() });
+});
+
+const recInput = z.object({
+  underlying: z.string().trim().toUpperCase().regex(/^[A-Z0-9&-]{2,20}$/),
+  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  atm: z.enum(['five', 'ten', 'fifteen', 'twenty', 'all']).optional(),
+  autoRoll: z.boolean().optional(),
+  enabled: z.boolean().optional(),
+  cookie: z.string().min(10).max(8000).optional(),
+});
+
+r.put('/options/recorders', requireAuth, async (req, res) => {
+  const b = parse(recInput, req.body);
+  const existing = await SbRecorder.findOne({ user: req.userId, underlying: b.underlying });
+  if (!existing) {
+    if ((await SbRecorder.countDocuments({ user: req.userId })) >= 3) throw new HttpError(400, 'Up to 3 chains can be recorded at once');
+    if (!b.cookie) throw new HttpError(400, 'Paste your Sensibull session to start server recording');
+  }
+  // A new cookie applies to all of this user's recorders (it's the same Sensibull login)
+  if (b.cookie) await SbRecorder.updateMany({ user: req.userId }, { $set: { cookie: seal(b.cookie), status: 'waiting', lastError: null } });
+  const set = { expiry: b.expiry, ...(b.atm && { atm: b.atm }), ...(b.autoRoll != null && { autoRoll: b.autoRoll }), ...(b.enabled != null && { enabled: b.enabled }) };
+  if (b.enabled !== false && existing?.status !== 'recording') Object.assign(set, { status: 'waiting', lastError: null });
+  const rec = existing
+    ? await SbRecorder.findOneAndUpdate({ _id: existing._id }, { $set: set }, { new: true }).lean()
+    : (await SbRecorder.create({ user: req.userId, underlying: b.underlying, cookie: seal(b.cookie), ...set })).toObject();
+  refreshRecorders();
+  res.json({ recorder: recView(rec) });
+});
+
+r.delete('/options/recorders/:underlying', requireAuth, async (req, res) => {
+  await SbRecorder.deleteOne({ user: req.userId, underlying: String(req.params.underlying).toUpperCase() });
+  refreshRecorders();
+  res.json({ ok: true });
+});
+
+// Remove every stored session (stops all server recording)
+r.delete('/options/recorders', requireAuth, async (req, res) => {
+  await SbRecorder.deleteMany({ user: req.userId });
+  refreshRecorders();
+  res.json({ ok: true });
 });
 
 r.get('/options/history', requireAuth, async (req, res) => {

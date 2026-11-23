@@ -15,3 +15,7 @@ createApp().listen(config.port, () => console.log(`API on http://localhost:${con
 const { ensureFresh } = await import('./lib/market/eod.js');
 setTimeout(() => ensureFresh().catch(() => {}), 30_000);
 setInterval(() => ensureFresh().catch(() => {}), 30 * 60_000);
+
+// Server-side option-chain recorder (Sensibull, 3s, market hours)
+const { startRecorder } = await import('./lib/market/recorder.js');
+startRecorder();

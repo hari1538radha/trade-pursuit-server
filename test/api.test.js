@@ -53,10 +53,13 @@ test('notes and quiz are protected and validated', async () => {
 });
 
 test('market routes are protected and validated', async () => {
-  for (const p of ['/api/options/history?key=NIFTY&expiry=2026-11-25', '/api/options/ticks?key=NIFTY&expiry=2026-11-25', '/api/stocks/scan', '/api/watchlist']) {
+  for (const p of ['/api/options/history?key=NIFTY&expiry=2026-11-25', '/api/options/ticks?key=NIFTY&expiry=2026-11-25', '/api/options/live?key=NIFTY&expiry=2026-11-25', '/api/options/recorders', '/api/options/strike-series?key=NIFTY&expiry=2026-11-25&strikes=1', '/api/stocks/scan', '/api/watchlist']) {
     assert.equal((await request(app).get(p)).status, 401, p);
   }
   assert.equal((await request(app).post('/api/options/chain').send({})).status, 401);
   const bad = await request(app).post('/api/options/chain').set('Authorization', `Bearer ${token}`).send({ cookie: 'access_token=x; y=z', underlying: 'NIFTY', expiry: 'tomorrow' });
   assert.equal(bad.status, 400);
+  assert.equal((await request(app).put('/api/options/recorders').send({})).status, 401);
+  const badRec = await request(app).put('/api/options/recorders').set('Authorization', `Bearer ${token}`).send({ underlying: 'NIFTY', expiry: 'soon' });
+  assert.equal(badRec.status, 400);
 });

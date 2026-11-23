@@ -10,9 +10,14 @@ const tick = new mongoose.Schema({
   spot: Number, atm: Number, pcr: Number, ceOI: Number, peOI: Number,
   dCe: Number, dPe: Number, // change in total call / put OI since the previous pull
   ceDelta: Number, peDelta: Number, // ATM option delta (greek), when the feed has it
-  d: { type: [[Number]], default: [] }, // [strike, dCeOI, dPeOI]
+  d: { type: [[Number]], default: [] }, // [strike, dCeOI, dPeOI] for strikes that moved
+  // Full chain at this pull, saved whenever anything changed:
+  // [strike, ceOI, peOI, cePrevOI, pePrevOI(, ceDelta, peDelta when the feed has greeks)]
+  s: { type: [[Number]], default: undefined },
+  src: String, // 'server' (recorder) or 'page'
 });
 tick.index({ user: 1, symbol: 1, expiry: 1, at: -1 });
 tick.index({ at: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 3 }); // keep 3 days
+tick.index({ symbol: 1, expiry: 1, user: 1, s: 1, at: -1 }, { partialFilterExpression: { s: { $exists: true } } });
 
 export const OITick = mongoose.model('OITick', tick);
