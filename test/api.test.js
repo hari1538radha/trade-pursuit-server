@@ -7,7 +7,11 @@ process.env.NODE_ENV = 'test';
 const { createApp } = await import('../src/app.js');
 const { config } = await import('../src/config.js');
 const app = createApp();
-const token = jwt.sign({ sub: '64b000000000000000000001', u: 'tester' }, config.jwtSecret);
+const token = jwt.sign({ sub: '64b000000000000000000001', u: 'tester' }, config.jwtSecret); // admin
+const userToken = jwt.sign({ sub: '64b000000000000000000002', u: 'friend' }, config.jwtSecret); // normal user
+// No database in these tests: roles come from this stub
+const { roles } = await import('../src/middleware/auth.js');
+roles.lookup = async (id) => (id === '64b000000000000000000001' ? 'admin' : id === '64b000000000000000000002' ? 'user' : null);
 
 test('health + firms', async () => {
   assert.equal((await request(app).get('/api/health')).body.ok, true);
@@ -62,4 +66,20 @@ test('market routes are protected and validated', async () => {
   assert.equal((await request(app).put('/api/options/recorders').send({})).status, 401);
   const badRec = await request(app).put('/api/options/recorders').set('Authorization', `Bearer ${token}`).send({ underlying: 'NIFTY', expiry: 'soon' });
   assert.equal(badRec.status, 400);
+});
+
+test('roles: normal users are kept out of admin-only areas', async () => {
+  const asUser = (m, p) => request(app)[m](p).set('Authorization', `Bearer ${userToken}`);
+  for (const p of ['/api/admin/users', '/api/notes', '/api/quiz', '/api/options/recorders', '/api/stocks/scan', '/api/watchlist', '/api/markets/goldbach?symbol=XAUUSD']) {
+    const r = await asUser('get', p);
+    assert.equal(r.status, 403, p);
+    assert.match(r.body.error, /admins only/);
+  }
+  assert.equal((await asUser('post', '/api/options/chain').send({})).status, 403);
+  assert.equal((await asUser('patch', '/api/admin/users/64b000000000000000000001/role').send({ role: 'user' })).status, 403);
+  // An admin passes the guard (then hits validation)
+  const a = await request(app).patch('/api/admin/users/64b000000000000000000002/role').set('Authorization', `Bearer ${token}`).send({ role: 'boss' });
+  assert.equal(a.status, 400);
+  // Signed-out still gets 401
+  assert.equal((await request(app).get('/api/admin/users')).status, 401);
 });

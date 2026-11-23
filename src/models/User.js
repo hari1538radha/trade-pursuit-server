@@ -1,4 +1,8 @@
 import mongoose from 'mongoose';
+import { config } from '../config.js';
+
+/** Usernames listed in ADMIN_USERNAMES are always admins */
+export const isAdminName = (u) => config.adminUsernames.includes(String(u || '').toLowerCase());
 
 export const DEFAULT_CHECKLIST = [
   'Have you done your high timeframe?',
@@ -13,6 +17,7 @@ const userSchema = new mongoose.Schema(
     displayName: { type: String, trim: true, maxlength: 40 },
     passwordHash: { type: String, required: true, select: false },
     bio: { type: String, maxlength: 200, default: '' },
+    role: { type: String, enum: ['user', 'admin'], default: 'user' },
     settings: {
       checklist: { type: [String], default: DEFAULT_CHECKLIST },
       breakEven: { type: Number, default: 0 }, // |pnl| <= this counts as break-even
@@ -52,6 +57,8 @@ userSchema.set('toJSON', {
     delete r._id;
     delete r.__v;
     delete r.passwordHash;
+    if (isAdminName(r.username)) r.role = 'admin';
+    r.role = r.role || 'user';
     return r;
   },
 });

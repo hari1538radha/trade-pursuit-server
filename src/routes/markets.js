@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getRange, RANGE_SYMBOLS } from '../lib/range.js';
 import { getGoldbachData } from '../lib/goldbach.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 const r = Router();
 
@@ -12,7 +13,7 @@ r.get('/range', async (req, res) => {
 });
 
 // GET /api/markets/goldbach?symbol=XAUUSD&interval=1h  (candles + spot for the Goldbach page)
-r.get('/goldbach', async (req, res) => {
+r.get('/goldbach', requireAdmin, async (req, res) => {
   const symbol = String(req.query.symbol || 'XAUUSD').toUpperCase();
   const interval = String(req.query.interval || '1h');
   try { res.json(await getGoldbachData(symbol, interval)); }

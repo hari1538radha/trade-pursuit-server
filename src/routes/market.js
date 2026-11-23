@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin as requireAuth } from '../middleware/auth.js'; // every route here is admin-only
 import { HttpError, parse } from '../lib/http.js';
 import { OISnapshot } from '../models/OISnapshot.js';
 import { SbRecorder } from '../models/SbRecorder.js';
