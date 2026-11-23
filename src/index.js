@@ -10,3 +10,8 @@ if (!config.mongoUri) {
 await mongoose.connect(config.mongoUri, { maxPoolSize: 20 });
 console.log('MongoDB connected');
 createApp().listen(config.port, () => console.log(`API on http://localhost:${config.port}`));
+
+// Keep NSE end-of-day data current while the server is awake.
+const { ensureFresh } = await import('./lib/market/eod.js');
+setTimeout(() => ensureFresh().catch(() => {}), 30_000);
+setInterval(() => ensureFresh().catch(() => {}), 30 * 60_000);

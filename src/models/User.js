@@ -21,11 +21,10 @@ const userSchema = new mongoose.Schema(
         dailyLossLimit: { type: Number, default: 0 },
         maxTradesPerDay: { type: Number, default: 0 },
       },
-      appearance: {
-        car: { type: String, default: 'm4-snow' }, // dashboard background id, 'custom' or 'none'
-        customName: { type: String, default: '' },
-        customImage: { type: String, default: '' }, // user's own photo (data URL)
-        glass: { type: Number, default: 50 }, // card opacity over the background, %
+      donts: { type: [String], default: [] }, // trader's own 'never do this' list
+      coach: {
+        enabled: { type: Boolean, default: true },
+        lookback: { type: Number, default: 5 },
       },
       tags: {
         playbooks: { type: [String], default: ['Reversal', 'Continuation', 'Retracement', 'Manipulation'] },

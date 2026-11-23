@@ -7,7 +7,10 @@ import { Trade } from '../models/Trade.js';
 import { Account } from '../models/Account.js';
 import { DailyPlan } from '../models/DailyPlan.js';
 import { Post } from '../models/Post.js';
-import { Friendship } from '../models/Friendship.js';
+import { Note } from '../models/Note.js';
+import { QuizResult } from '../models/QuizResult.js';
+import { Watch } from '../models/Market.js';
+import { OISnapshot } from '../models/OISnapshot.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
 import { HttpError, parse } from '../lib/http.js';
 
@@ -83,8 +86,10 @@ r.delete('/me', requireAuth, async (req, res) => {
     DailyPlan.deleteMany({ user: req.userId }),
     Account.deleteMany({ user: req.userId }),
     Post.deleteMany({ user: req.userId }),
-    Friendship.deleteMany({ $or: [{ from: req.userId }, { to: req.userId }] }),
-    DailyPlan.updateMany({ sharedWith: req.userId }, { $pull: { sharedWith: req.userId } }),
+    Note.deleteMany({ user: req.userId }),
+    QuizResult.deleteMany({ user: req.userId }),
+    Watch.deleteMany({ user: req.userId }),
+    OISnapshot.deleteMany({ user: req.userId }),
     User.deleteOne({ _id: req.userId }),
   ]);
   res.json({ ok: true });

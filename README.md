@@ -38,8 +38,14 @@ Check it: `https://<your-service>.onrender.com/api/health` → `{"ok":true}`.
 
 Free services sleep after 15 minutes idle and take about a minute to wake on the next request.
 
+## Market data
+
+**Option chain (Sensibull).** Each user pastes their own Sensibull session (cookie string or the whole copied curl) on the Options page. It is kept only in that user's browser and sent with each refresh; the server uses it for that one request, never stores or logs it, and allows at most one refresh per user every 20 seconds. Snapshots of the derived OI totals are saved while the page is open during market hours (kept 14 days) for the time charts. This uses an unofficial Sensibull endpoint: it can change or stop working, and using it may be against Sensibull's terms.
+
+**Stocks (NSE end-of-day).** The server downloads NSE's public daily CM bhavcopy files, keeps ~300 days per symbol and re-runs the scanner after each evening's file. The first load backfills a year (a few minutes); later updates take seconds. It runs while the server is awake; Render's free plan sleeps after 15 idle minutes, so opening the Stocks page (or a free uptime monitor hitting `/api/health`) keeps it current.
+
 ## Endpoints
-`/api/auth` (register, login, me, password) · `/api/trades` · `/api/accounts` · `/api/plans` (list, `/:date`, `/:date/share`, `/shared?date=`) · `/api/friends` (list, request, `/:id/accept`, remove) · `/api/posts` · `/api/news?week=thisweek|nextweek` · `/api/firms` · `/api/health`
+`/api/auth` (register, login, me, password) · `/api/trades` · `/api/accounts` · `/api/plans` (list, `/:date`) · `/api/notes` · `/api/quiz` · `/api/news?week=thisweek|nextweek` · `/api/markets/range?symbols=` · `/api/options/*` · `/api/stocks/*` · `/api/watchlist` · `/api/firms` · `/api/health`
 
 The news endpoint reads the free Forex Factory weekly calendar export and caches it for 30 minutes, so the Render service needs outbound internet access (it has it by default).
 

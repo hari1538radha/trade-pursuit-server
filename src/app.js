@@ -13,9 +13,10 @@ import authRoutes from './routes/auth.js';
 import tradeRoutes from './routes/trades.js';
 import accountRoutes from './routes/accounts.js';
 import planRoutes from './routes/plans.js';
-import postRoutes from './routes/posts.js';
-import friendRoutes from './routes/friends.js';
-import marketRoutes from './routes/markets.js';
+import rangeRoutes from './routes/markets.js';
+import noteRoutes from './routes/notes.js';
+import quizRoutes from './routes/quiz.js';
+import marketRoutes from './routes/market.js';
 import { getNews } from './lib/news.js';
 import { HttpError } from './lib/http.js';
 
@@ -49,9 +50,9 @@ export function createApp() {
   app.use('/api/trades', requireAuth, tradeRoutes);
   app.use('/api/accounts', requireAuth, accountRoutes);
   app.use('/api/plans', requireAuth, planRoutes);
-  app.use('/api/posts', requireAuth, postRoutes);
-  app.use('/api/friends', requireAuth, friendRoutes);
-  app.use('/api/markets', requireAuth, marketRoutes);
+  app.use('/api/notes', requireAuth, noteRoutes);
+  app.use('/api/quiz', requireAuth, quizRoutes);
+  app.use('/api/markets', requireAuth, rangeRoutes); // range check
   // Economic calendar: ?week=thisweek|nextweek
   app.get('/api/news', async (req, res) => {
     try {
@@ -61,6 +62,7 @@ export function createApp() {
       throw new HttpError(e.status || 502, e.message, e.reason ? { reason: e.reason } : undefined);
     }
   });
+  app.use('/api', marketRoutes); // options, stocks, watchlist (auth applied per route)
 
   app.use(notFound);
   app.use(errorHandler);

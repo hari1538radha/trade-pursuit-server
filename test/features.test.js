@@ -1,4 +1,4 @@
-// Friends, plan sharing and news: guards, validation and the feed parser. No database needed.
+// Plans and news: guards, validation and the feed parser. No database needed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
@@ -10,20 +10,10 @@ const { normalize, getNews, _resetNewsCache } = await import('../src/lib/news.js
 const app = createApp();
 const auth = `Bearer ${jwt.sign({ sub: '64b000000000000000000001', u: 'tester' }, config.jwtSecret)}`;
 
-test('friends and shared plans need a token', async () => {
-  for (const p of ['/api/friends', '/api/plans', '/api/plans/shared?date=2026-11-21']) {
+test('plans and range routes need a token', async () => {
+  for (const p of ['/api/plans', '/api/markets/range']) {
     assert.equal((await request(app).get(p)).status, 401, p);
   }
-  assert.equal((await request(app).post('/api/friends').send({ username: 'x' })).status, 401);
-});
-
-test('friend + share input is validated before touching the db', async () => {
-  assert.equal((await request(app).post('/api/friends').set('Authorization', auth).send({})).status, 400);
-  assert.equal((await request(app).post('/api/friends/nope/accept').set('Authorization', auth)).status, 400);
-  assert.equal((await request(app).delete('/api/friends/nope').set('Authorization', auth)).status, 400);
-  assert.equal((await request(app).get('/api/plans/shared?date=yesterday').set('Authorization', auth)).status, 400);
-  const s = await request(app).post('/api/plans/2026-11-21/share').set('Authorization', auth).send({ userIds: ['junk'] });
-  assert.equal(s.status, 400);
 });
 
 test('plan input rejects too many chart images', async () => {

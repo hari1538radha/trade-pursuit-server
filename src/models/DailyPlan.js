@@ -25,12 +25,10 @@ const planSchema = new mongoose.Schema(
       type: [{ symbol: String, adr: Number, todayRange: Number, pct: Number, left: Number, pdh: Number, pdl: Number, verdict: String, line: String, at: Date, _id: false }],
       default: [],
     },
-    sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true }
 );
 planSchema.index({ user: 1, date: 1 }, { unique: true });
-planSchema.index({ sharedWith: 1, date: 1 });
 planSchema.set('toJSON', {
   transform: (_d, r) => {
     r.id = String(r._id);

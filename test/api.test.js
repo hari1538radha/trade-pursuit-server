@@ -16,7 +16,7 @@ test('health + firms', async () => {
 });
 
 test('protected routes need a token', async () => {
-  for (const p of ['/api/trades', '/api/accounts', '/api/posts', '/api/plans/2026-11-21', '/api/auth/me']) {
+  for (const p of ['/api/trades', '/api/accounts', '/api/plans/2026-11-21', '/api/auth/me']) {
     assert.equal((await request(app).get(p)).status, 401, p);
   }
   assert.equal((await request(app).get('/api/trades').set('Authorization', 'Bearer junk')).status, 401);
@@ -41,4 +41,22 @@ test('unknown route is 404 json', async () => {
   const r = await request(app).get('/api/nope');
   assert.equal(r.status, 404);
   assert.equal(r.body.error, 'Not found');
+});
+
+test('notes and quiz are protected and validated', async () => {
+  assert.equal((await request(app).get('/api/notes')).status, 401);
+  assert.equal((await request(app).get('/api/quiz')).status, 401);
+  const bad = await request(app).post('/api/notes').set('Authorization', `Bearer ${token}`).send({ title: '' });
+  assert.equal(bad.status, 400);
+  const badq = await request(app).post('/api/quiz').set('Authorization', `Bearer ${token}`).send({ score: 3 });
+  assert.equal(badq.status, 400);
+});
+
+test('market routes are protected and validated', async () => {
+  for (const p of ['/api/options/history?key=NIFTY&expiry=2026-11-25', '/api/stocks/scan', '/api/watchlist']) {
+    assert.equal((await request(app).get(p)).status, 401, p);
+  }
+  assert.equal((await request(app).post('/api/options/chain').send({})).status, 401);
+  const bad = await request(app).post('/api/options/chain').set('Authorization', `Bearer ${token}`).send({ cookie: 'access_token=x; y=z', underlying: 'NIFTY', expiry: 'tomorrow' });
+  assert.equal(bad.status, 400);
 });
