@@ -200,6 +200,8 @@ r.get('/stocks/:symbol', requireAuth, async (req, res) => {
 // ---------------- Watchlist ----------------
 const num = z.coerce.number().finite().optional().nullable();
 const watchInput = z.object({
+  qty: z.coerce.number().nonnegative().max(1e9).optional().nullable(),
+  buyPrice: z.coerce.number().nonnegative().max(1e9).optional().nullable(),
   symbol: z.string().trim().min(1).max(30), setup: z.string().max(60).optional(), side: z.enum(['long', 'short', 'watch']).optional(),
   entry: num, stop: num, target: num, note: z.string().max(1000).optional(), addedClose: num,
   status: z.enum(['watching', 'triggered', 'done', 'dropped']).optional(),

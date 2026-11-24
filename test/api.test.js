@@ -92,4 +92,6 @@ test('personal tracking validates input (admin)', async () => {
   assert.equal((await as('post', '/api/me/props/payouts').send({ date: '2026-10-22', firm: 'FundingPips', gross: 503 })).status, 400);
   assert.equal((await as('put', '/api/me/life/days/yesterday').send({})).status, 400);
   assert.equal((await as('put', '/api/me/life/days/2026-11-23').send({ sleep: 'lots' })).status, 400);
+  assert.equal((await as('post', '/api/me/money/holdings').send({ kind: 'loan', name: 'Car', principal: 500000, rate: 250, start: '2026-01-01' })).status, 400);
+  assert.equal((await as('post', '/api/me/money/holdings').send({ kind: 'stock', name: 'X', principal: 1, rate: 1, start: '2026-01-01' })).status, 400);
 });

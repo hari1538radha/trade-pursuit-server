@@ -7,6 +7,7 @@ const rulesSchema = new mongoose.Schema(
     maxLossType: { type: String, default: 'Static' },
     dailyLoss: Number, // $
     minDays: { type: Number, default: 0 },
+    minTrades: { type: Number, default: 0 },
     consistency: String,
   },
   { _id: false }
@@ -21,6 +22,12 @@ const accountSchema = new mongoose.Schema(
     firmType: { type: String, default: 'CFD' },
     program: String,
     variant: String,
+    programId: String, // catalog ids, so the next phase can take the right rules
+    variantId: String,
+    purchasedAt: String, // YYYY-MM-DD the account was bought (defaults to when it was added)
+    passedAt: String,
+    failedAt: String,
+    prevAccount: String, // previous phase's account id (Phase 1 → Phase 2 → Funded)
     size: { type: Number, required: true },
     phase: { type: String, default: 'Phase 1' },
     kind: { type: String, enum: ['eval', 'funded', 'personal'], default: 'eval' },

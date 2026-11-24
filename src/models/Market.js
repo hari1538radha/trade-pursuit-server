@@ -24,6 +24,7 @@ const watch = new mongoose.Schema({
   setup: { type: String, maxlength: 60, default: '' },
   side: { type: String, enum: ['long', 'short', 'watch'], default: 'watch' },
   entry: Number, stop: Number, target: Number,
+  qty: Number, buyPrice: Number, // holding, to work out invested amount and return
   note: { type: String, maxlength: 1000, default: '' },
   addedClose: Number,
   status: { type: String, enum: ['watching', 'triggered', 'done', 'dropped'], default: 'watching' },

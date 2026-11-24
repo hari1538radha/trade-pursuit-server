@@ -13,7 +13,7 @@ import { Watch } from '../models/Market.js';
 import { OISnapshot } from '../models/OISnapshot.js';
 import { OITick } from '../models/OITick.js';
 import { SbRecorder } from '../models/SbRecorder.js';
-import { FinEntry, Emi, PropPurchase, PropPayout, DayLog } from '../models/Personal.js';
+import { FinEntry, Emi, PropPurchase, PropPayout, DayLog, Holding } from '../models/Personal.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
 import { HttpError, parse } from '../lib/http.js';
 
@@ -95,7 +95,7 @@ r.delete('/me', requireAuth, async (req, res) => {
     OISnapshot.deleteMany({ user: req.userId }),
     OITick.deleteMany({ user: req.userId }),
     SbRecorder.deleteMany({ user: req.userId }),
-    ...[FinEntry, Emi, PropPurchase, PropPayout, DayLog].map((M) => M.deleteMany({ user: req.userId })),
+    ...[FinEntry, Emi, PropPurchase, PropPayout, DayLog, Holding].map((M) => M.deleteMany({ user: req.userId })),
     User.deleteOne({ _id: req.userId }),
   ]);
   res.json({ ok: true });

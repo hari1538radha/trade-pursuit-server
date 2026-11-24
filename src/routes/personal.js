@@ -1,7 +1,7 @@
 // Admin-only personal tracking API (mounted behind requireAdmin).
 import { Router } from 'express';
 import { z } from 'zod';
-import { FinEntry, Emi, PropPurchase, PropPayout, DayLog } from '../models/Personal.js';
+import { FinEntry, Emi, PropPurchase, PropPayout, DayLog, Holding } from '../models/Personal.js';
 import { HttpError, parse, isObjectId } from '../lib/http.js';
 
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -64,6 +64,12 @@ export const daySchema = z.object({
 
 crud(r, '/money/entries', FinEntry, entrySchema);
 crud(r, '/money/emis', Emi, emiSchema, { start: 1, createdAt: 1 });
+export const holdingSchema = z.object({
+  kind: z.enum(['investment', 'loan']), name: str(60).min(1), where: str(60).optional(), principal: num.positive(),
+  rate: num.min(0).max(100), compounding: z.enum(['simple', 'yearly', 'quarterly', 'monthly']).optional(), start: ymd,
+  months: z.number().int().min(1).max(600).nullable().optional(), closed: z.boolean().optional(), note: str(300).optional(),
+});
+crud(r, '/money/holdings', Holding, holdingSchema, { start: -1 });
 crud(r, '/props/purchases', PropPurchase, purchaseSchema);
 crud(r, '/props/payouts', PropPayout, payoutSchema);
 

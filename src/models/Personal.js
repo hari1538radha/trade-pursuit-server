@@ -72,3 +72,18 @@ const dayLog = new mongoose.Schema({
 }, { timestamps: true });
 dayLog.index({ user: 1, date: 1 }, { unique: true });
 export const DayLog = mongoose.model('DayLog', json(dayLog));
+
+// Investments (money put in, growing at a rate) and loans (money borrowed, charged at a rate)
+export const Holding = mongoose.model('Holding', json(new mongoose.Schema({
+  ...own,
+  kind: { type: String, enum: ['investment', 'loan'], required: true },
+  name: { type: String, required: true, maxlength: 60 },
+  where: { type: String, default: '', maxlength: 60 }, // bank, app, lender
+  principal: { type: Number, required: true },
+  rate: { type: Number, required: true }, // % per year
+  compounding: { type: String, enum: ['simple', 'yearly', 'quarterly', 'monthly'], default: 'yearly' },
+  start: { type: String, required: true }, // YYYY-MM-DD
+  months: Number, // tenure (loans: repaid by EMI over this many months; investments: maturity)
+  closed: { type: Boolean, default: false },
+  note: { type: String, default: '', maxlength: 300 },
+}, { timestamps: true })));

@@ -30,6 +30,8 @@ const userSchema = new mongoose.Schema(
       // Admin personal tracking: lifestyle targets/habits/diet plan, money settings (₹ per $ etc.)
       life: { type: mongoose.Schema.Types.Mixed, default: undefined },
       finance: { type: mongoose.Schema.Types.Mixed, default: undefined },
+      layouts: { type: mongoose.Schema.Types.Mixed, default: undefined }, // page layouts (drag & resize)
+      customFirms: { type: mongoose.Schema.Types.Mixed, default: undefined }, // firms you added or edited
       coach: {
         enabled: { type: Boolean, default: true },
         lookback: { type: Number, default: 5 },

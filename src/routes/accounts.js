@@ -13,6 +13,12 @@ const accountInput = z.object({
   firmType: z.string().max(20).optional(),
   program: z.string().max(60).optional(),
   variant: z.string().max(60).optional(),
+  programId: z.string().max(60).optional().nullable(),
+  variantId: z.string().max(60).optional().nullable(),
+  purchasedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  passedAt: z.string().max(10).optional().nullable(),
+  failedAt: z.string().max(10).optional().nullable(),
+  prevAccount: z.string().max(40).optional().nullable(),
   size: z.coerce.number().positive(),
   phase: z.string().max(30).optional(),
   kind: z.enum(['eval', 'funded', 'personal']).optional(),
@@ -21,7 +27,7 @@ const accountInput = z.object({
   startBalance: num,
   payouts: z.array(z.object({ amount: z.coerce.number(), date: z.string() })).max(200).optional(),
   rules: z
-    .object({ profitTarget: num, maxLoss: num, maxLossType: z.string().optional(), dailyLoss: num, minDays: num, consistency: z.string().optional().nullable() })
+    .object({ profitTarget: num, maxLoss: num, maxLossType: z.string().optional(), dailyLoss: num, minDays: num, minTrades: num, consistency: z.string().optional().nullable() })
     .optional(),
 });
 
