@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getRange, RANGE_SYMBOLS } from '../lib/range.js';
 import { getGoldbachData } from '../lib/goldbach.js';
 import { getBars, BAR_SYMBOLS } from '../lib/bars.js';
+import { getMacro } from '../lib/macro/index.js';
 import { requireAdmin } from '../middleware/auth.js';
 
 const r = Router();
@@ -19,6 +20,12 @@ r.get('/goldbach', requireAdmin, async (req, res) => {
   const interval = String(req.query.interval || '1h');
   try { res.json(await getGoldbachData(symbol, interval)); }
   catch (e) { res.status(e.status || 502).json({ error: e.status ? e.message : `No price data for ${symbol} right now`, reason: e.message }); }
+});
+
+// GET /api/markets/macro  (macro data, prices, events, positioning, calendar and headlines for the Macro page)
+r.get('/macro', requireAdmin, async (req, res) => {
+  try { res.json(await getMacro()); }
+  catch (e) { res.status(e.status || 502).json({ error: e.status ? e.message : 'Macro data is unavailable right now', reason: e.reason || e.message }); }
 });
 
 // GET /api/markets/bars?symbol=XAUUSD  (6 months of hourly candles for the Daily levels page)

@@ -180,3 +180,63 @@ test('daily-levels bars: yahoo hourly parse, stooq spot, basis and admin-only ro
   const nq = await getBars('NAS100', fake);
   assert.equal(nq.basis, 0);                       // no spot shift for Nasdaq
 });
+
+test('macro: parsers, release times and a bundle that survives a failed source', async () => {
+  const m = await import('../src/lib/macro/index.js');
+  const { nyToUtc, EVENTS } = await import('../src/lib/macro/dates.js');
+  // FRED csv: blank (new format) and "." (old format) rows are dropped
+  assert.deepEqual(m.parseFredCsv('observation_date,DFII10\n2026-11-10,2.78\n2026-11-11,\n2026-11-12,.\n2026-11-13,2.91'), [['2026-11-10', 2.78], ['2026-11-13', 2.91]]);
+  assert.throws(() => m.parseFredCsv('<html>'), /not a FRED csv/);
+  // weekly = last observation of each Monday-Sunday week
+  assert.deepEqual(m.toWeekly([['2026-11-09', 1], ['2026-11-13', 2], ['2026-11-16', 3], ['2026-11-18', 4]]), [['2026-11-13', 2], ['2026-11-18', 4]]);
+  // Yahoo daily: the exchange's calendar date (gmtoffset), bad rows dropped
+  const y = { chart: { result: [{ meta: { gmtoffset: -18000 }, timestamp: [1795410000, 1795496400, 1795582800], indicators: { quote: [{ open: [1, 2, null], high: [1, 2, 3], low: [1, 2, 3], close: [1, 2, 3] }] } }] } };
+  const d = m.parseYahooDaily(y);
+  assert.equal(d.length, 2);
+  assert.equal(d[0][0], new Date(1795410000e3 - 18000e3).toISOString().slice(0, 10));
+  // New York release times through daylight saving
+  assert.equal(new Date(nyToUtc('2026-11-10', '08:30')).toISOString(), '2026-11-10T13:30:00.000Z');
+  assert.equal(new Date(nyToUtc('2026-07-14', '08:30')).toISOString(), '2026-07-14T12:30:00.000Z');
+  assert.equal(new Date(nyToUtc('2020-03-15', '17:00')).toISOString(), '2020-03-15T21:00:00.000Z');
+  assert.equal(new Date(nyToUtc('2026-03-08', '08:30')).toISOString(), '2026-03-08T12:30:00.000Z'); // DST starts that Sunday
+  assert.equal(new Date(nyToUtc('2026-11-01', '08:30')).toISOString(), '2026-11-01T13:30:00.000Z'); // and ends that Sunday
+  assert.ok(EVENTS.some((e) => e.type === 'FOMC' && e.date === '2026-12-09'));
+  assert.ok(!EVENTS.some((e) => e.type === 'CPI' && e.date.startsWith('2025-11'))); // October 2025 CPI was cancelled
+  // hourly windows around events
+  const at = nyToUtc('2026-11-06', '08:30');
+  const bars = Array.from({ length: 40 }, (_, i) => [at - 10 * 3600e3 + i * 3600e3, 1, 2, 0.5, 1.5]);
+  const w = m.eventWindows(bars, [{ type: 'NFP', date: '2026-11-06', at }], at + 30 * 3600e3);
+  assert.equal(w['NFP:2026-11-06'].length, 16);
+  // CFTC numbers arrive as strings
+  assert.deepEqual(m.parseCot([{ report_date_as_yyyy_mm_dd: '2026-11-17T00:00:00.000', a: '121994', b: '19052' }, { report_date_as_yyyy_mm_dd: '2026-11-10T00:00:00.000', a: '127406', b: '15065' }], ['a', 'b']),
+    [['2026-11-10', 127406, 15065], ['2026-11-17', 121994, 19052]]);
+  // RSS: CDATA, entities and Investing.com's zone-less dates
+  const rss = m.parseRss('<rss><channel><item><title><![CDATA[Gold &amp; yields]]></title><link>https://x.com/a</link><pubDate>2026-11-15 03:12:19</pubDate></item><item><title>No link</title></item></channel></rss>');
+  assert.deepEqual(rss, [{ title: 'Gold & yields', link: 'https://x.com/a', at: Date.parse('2026-11-15T03:12:19Z') }]);
+
+  // Bundle: FRED down -> still served with a status; prices down -> 502
+  m._resetMacroCache();
+  const { _resetNewsCache } = await import('../src/lib/news.js');
+  _resetNewsCache();
+  const ts = Array.from({ length: 1200 }, (_, i) => 1104537600 + i * 86400);
+  const chart = { chart: { result: [{ meta: { gmtoffset: 0 }, timestamp: ts, indicators: { quote: [{ open: ts.map(() => 10), high: ts.map(() => 11), low: ts.map(() => 9), close: ts.map(() => 10.5) }] } }] } };
+  const ok = (body) => ({ ok: true, json: async () => body, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
+  const fake = (pricesUp) => async (url) => {
+    if (url.includes('fred.stlouisfed.org')) return { ok: false, status: 503 };
+    if (url.includes('yahoo')) return pricesUp ? ok(chart) : { ok: false, status: 429 };
+    if (url.includes('cftc')) return ok([{ report_date_as_yyyy_mm_dd: '2026-11-17T00:00:00.000', m_money_positions_long_all: '1', m_money_positions_short_all: '2', open_interest_all: '3', lev_money_positions_long: '1', lev_money_positions_short: '1', asset_mgr_positions_long: '1', asset_mgr_positions_short: '1' }]);
+    if (url.includes('faireconomy')) return ok([{ title: 'CPI m/m', country: 'USD', date: '2026-12-10T08:30:00-05:00', impact: 'High', forecast: '0.3%', previous: '0.2%' }]);
+    return ok(`<rss><item><title>Gold rises</title><link>https://n.com/1</link><pubDate>${new Date().toUTCString()}</pubDate></item></rss>`);
+  };
+  const b = await m.getMacro(fake(true));
+  assert.equal(b.status.fred.ok, false);
+  assert.match(b.status.fred.error, /FRED/);
+  assert.equal(b.prices.XAUUSD.daily.length, 1200);
+  assert.equal(b.cot.XAUUSD.rows[0][1], 1);
+  assert.equal(b.calendar[0].impact, 'high');
+  assert.equal(b.headlines[0].title, 'Gold rises');
+  assert.ok(b.events.length > 400);
+  m._resetMacroCache();
+  _resetNewsCache();
+  await assert.rejects(m.getMacro(fake(false)), /prices are unavailable/);
+});
