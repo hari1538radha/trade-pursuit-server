@@ -70,7 +70,7 @@ test('market routes are protected and validated', async () => {
 
 test('roles: normal users are kept out of admin-only areas', async () => {
   const asUser = (m, p) => request(app)[m](p).set('Authorization', `Bearer ${userToken}`);
-  for (const p of ['/api/me/money/entries', '/api/me/money/emis', '/api/me/props/purchases', '/api/me/props/payouts', '/api/me/life/days', '/api/admin/users', '/api/notes', '/api/quiz', '/api/options/recorders', '/api/stocks/scan', '/api/watchlist', '/api/markets/goldbach?symbol=XAUUSD']) {
+  for (const p of ['/api/me/money/entries', '/api/me/money/emis', '/api/me/props/purchases', '/api/me/props/payouts', '/api/me/life/days', '/api/admin/users', '/api/notes', '/api/quiz', '/api/options/recorders', '/api/stocks/scan', '/api/watchlist', '/api/markets/goldbach?symbol=XAUUSD', '/api/markets/bars?symbol=XAUUSD']) {
     const r = await asUser('get', p);
     assert.equal(r.status, 403, p);
     assert.match(r.body.error, /admins only/);

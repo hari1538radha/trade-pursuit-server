@@ -160,3 +160,23 @@ test('goldbach data: yahoo candles, 4h grouping and stooq spot', async () => {
   assert.equal(spotFromStooq('Symbol,Date,Time,Open,High,Low,Close\nXAUUSD,2026-11-23,10:00:00,3990,4005,3980,3998.4'), 3998.4);
   assert.equal(spotFromStooq('Symbol,Date\nXAUUSD,N/D'), null);
 });
+
+test('daily-levels bars: yahoo hourly parse, stooq spot, basis and admin-only route', async () => {
+  const { barsFromYahoo, lastFromStooq, getBars, _resetBarsCache } = await import('../src/lib/bars.js');
+  const ts = Array.from({ length: 240 }, (_, i) => 1795000000 + i * 3600);
+  const json = { chart: { result: [{ meta: { regularMarketPrice: 3630 }, timestamp: ts, indicators: { quote: [{ open: ts.map(() => 3620), high: ts.map(() => 3625.12345), low: ts.map(() => 3615), close: ts.map((_, i) => (i === 5 ? null : 3621)) }] } }] } };
+  const { bars, last } = barsFromYahoo(json);
+  assert.equal(bars.length, 239);                 // the row with a missing close is dropped
+  assert.deepEqual(bars[0], [1795000000000, 3620, 3625.123, 3615, 3621]);
+  assert.equal(last, 3630);
+  assert.equal(lastFromStooq('Symbol,Date,Time,Open,High,Low,Close\nXAUUSD,2026-11-27,22:00:00,3600,3611,3590,3610.5'), 3610.5);
+  assert.equal(lastFromStooq('garbage'), null);
+  _resetBarsCache();
+  const fake = async (url) => ({ ok: true, json: async () => json, text: async () => 'Symbol,Date,Time,Open,High,Low,Close\nXAUUSD,2026-11-27,22:00:00,1,1,1,3610' });
+  const d = await getBars('XAUUSD', fake);
+  assert.equal(d.basis, 20);
+  assert.equal(d.spot, 3610);
+  await assert.rejects(getBars('BTC', fake), /Unsupported/);
+  const nq = await getBars('NAS100', fake);
+  assert.equal(nq.basis, 0);                       // no spot shift for Nasdaq
+});
